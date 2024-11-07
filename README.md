@@ -1,4 +1,4 @@
-# Estrategias de Backup y Recuperación de etcd - Lab Práctico para CKA
+# Estrategias de Backup y Recuperación de etcd Lab - CKA Course
 
 Este laboratorio práctico está diseñado para ayudar a los aspirantes a la certificación CKA (Certified Kubernetes Administrator) a aprender a implementar estrategias de backup y restauración de etcd, un componente esencial en el control plane de Kubernetes. Se basa en el material de respaldo "Backing Up and Restoring etcd". Asegúrate de seguir cada paso cuidadosamente y practicar varias veces para estar completamente preparado para el examen.
 
@@ -71,15 +71,15 @@ Las VMs consisten en:
    - No se requiere un usuario específico, deja el campo vacío.
    - Si se te solicita usuario o contraseña, utiliza la cadena `vagrant`.
 
-### Paso 3: Instalación del Cliente etcdctl
+## Paso 3: Instalación del Cliente etcdctl
 
-Para realizar operaciones de backup y restauración, necesitas el cliente `etcdctl`. Instálalo con:
+Para realizar operaciones de backup y restauración, necesitas el cliente `etcdctl`. En el **nodo Master**, instálalo con:
 
 ```bash
 sudo apt install etcd-client
 ```
 
-### Paso 4: Realizar una Copia de Seguridad de etcd
+## Paso 4: Realizar una Copia de Seguridad de etcd
 
 1. **Identificar el pod de etcd**: Ejecuta el siguiente comando para identificar el pod etcd en el cluster.
 
@@ -105,7 +105,7 @@ sudo apt install etcd-client
 
    Este comando crea un snapshot de etcd en la ruta `/tmp/snapshot-pre-boot.db`.
 
-### Paso 5: Restaurar la Copia de Seguridad
+## Paso 5: Restaurar la Copia de Seguridad
 
 1. **Eliminar el deployment anterior** (opcional):
 
@@ -121,7 +121,7 @@ sudo apt install etcd-client
 
    Este comando restaurará el snapshot en el directorio `/var/lib/etcd-from-backup`. Ten en cuenta que estamos dando un nuevo nombre al clúster de etcd y reinicializando el token del clúster.
 
-### Paso 6: Modificar el Manifiesto de etcd
+## Paso 6: Modificar el Manifiesto de etcd
 
 Para aplicar la restauración en el clúster, debes modificar el manifiesto del pod etcd para que apunte al nuevo directorio de datos.
 
@@ -139,7 +139,7 @@ Para aplicar la restauración en el clúster, debes modificar el manifiesto del 
 
 3. **Guardar los cambios**: Cuando se guarda este archivo, el pod de etcd se destruirá y se volverá a crear automáticamente, utilizando los nuevos datos restaurados.
 
-### Paso 7: Verificación
+## Paso 7: Verificación
 
 1. **Verificar el estado del pod**:
 
