@@ -1,6 +1,12 @@
 # Estrategias de Backup y Recuperación de etcd Lab - CKA Course
 
-Este laboratorio práctico está diseñado para ayudar a los aspirantes a la certificación CKA (Certified Kubernetes Administrator) a aprender a implementar estrategias de backup y restauración de etcd, un componente esencial en el control plane de Kubernetes. Se basa en el material de respaldo "Backing Up and Restoring etcd". Asegúrate de seguir cada paso cuidadosamente y practicar varias veces para estar completamente preparado para el examen.
+Este laboratorio práctico está diseñado para aprender a implementar estrategias de backup y restauración de etcd, un componente esencial en el control plane de Kubernetes. Asegúrate de seguir cada paso cuidadosamente y practicar varias veces para estar completamente preparado para el examen.
+
+## Prerrequisitos
+
+- **VirtualBox** (se necesita **Python** y **pywin32** como prerrequisitos).
+- **Vagrant**.
+- **MobaXterm** para sesiones SSH.
 
 ## Requisitos
 
@@ -13,12 +19,6 @@ Este laboratorio práctico está diseñado para ayudar a los aspirantes a la cer
 1. Realizar una copia de seguridad (snapshot) de etcd.
 2. Restaurar la copia de seguridad en un nuevo directorio de datos.
 3. Modificar el manifiesto de etcd para usar el nuevo directorio.
-
-## Prerrequisitos
-
-- **VirtualBox** (se necesita **Python** y **pywin32** como prerrequisitos).
-- **Vagrant**.
-- **MobaXterm** para sesiones SSH.
 
 ## Contenido del Repositorio
 
@@ -37,8 +37,8 @@ Las VMs consisten en:
 1. Clona el repositorio en tu entorno local:
 
    ```bash
-   git clone https://github.com/arol-dev/kubernetes-cka-install-upgrade-cluster.git
-   cd kubernetes-cka-install-upgrade-cluster
+   git clone https://github.com/arol-dev/kubernetes-cka-backup-recovery-etcd.git
+   cd kubernetes-cka-backup-recovery-etcd
    ```
 
 2. Dentro del repositorio, ejecuta el siguiente comando para desplegar las VMs:
