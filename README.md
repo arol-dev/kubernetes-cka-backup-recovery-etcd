@@ -71,7 +71,35 @@ Las VMs consisten en:
    - No se requiere un usuario específico, deja el campo vacío.
    - Si se te solicita usuario o contraseña, utiliza la cadena `vagrant`.
 
-## Paso 3: Instalación del Cliente etcdctl
+## Paso 3: Desplegar la Aplicación BookInfo de Istio
+
+1. Crea el namespace para BookInfo:
+   ```bash
+   kubectl create ns bookinfo
+   ```
+2. Despliega la aplicación:
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.23/samples/bookinfo/platform/kube/bookinfo.yaml -n bookinfo
+   ```
+
+3. Verifica que los pods se hayan desplegado correctamente en el namespace bookinfo.
+   ```bash
+   kubectl get pods -n bookinfo
+   ```
+
+4. Expone la aplicación localmente (opcional):
+   ```bash
+   kubectl port-forward svc/productpage 9080:9080 -n bookinfo
+   ```
+5. Prueba la aplicación desde el navegador (opcional):
+   - [http://127.0.0.1:9080/productpage](http://127.0.0.1:9080/productpage)
+
+6. Si la aplicación se ve lenta o incorrecta, reinicia el `coredns` (opcional):
+   ```bash
+   kubectl -n kube-system rollout restart deployment coredns
+   ```
+
+## Paso 4: Instalación del Cliente etcdctl
 
 Para realizar operaciones de backup y restauración, necesitas el cliente `etcdctl`. En el **nodo Master**, instálalo con:
 
@@ -79,49 +107,74 @@ Para realizar operaciones de backup y restauración, necesitas el cliente `etcdc
 sudo apt install etcd-client
 ```
 
-## Paso 4: Realizar una Copia de Seguridad de etcd
+Verifica la version de etcd-client:
+
+```bash
+etcdctl version
+```
+
+## Paso 5: Realizar una Copia de Seguridad de etcd
 
 1. **Identificar el pod de etcd**: Ejecuta el siguiente comando para identificar el pod etcd en el cluster.
 
    ```bash
-   kubectl get pods -n kube-system -o wide | grep etcd
+   kubectl get pods -n kube-system
    ```
 
 2. **Obtener las ubicaciones de los certificados y la clave**: Necesitarás los certificados para realizar una copia de seguridad. Usa:
 
    ```bash
-   kubectl describe pod etcd-master -n kube-system
+   kubectl describe pod etcd-controlplane -n kube-system
    ```
 
-   Busca las siguientes opciones: `cert-file`, `key-file`, `trusted-ca-file`, y `listen-client-urls`.
+   Busca el valor de la opción `--listen-client-urls` para la URL del endpoint. El certificado del servidor se encuentra en `/etc/kubernetes/pki/etcd/server.crt`, definido por la opción `--cert-file`. 
+   El certificado CA se puede encontrar en `/etc/kubernetes/pki/etcd/ca.crt`, especificado por la opción `--trusted-ca-file`.
 
 3. **Realizar la copia de seguridad**:
 
    Ejecuta el siguiente comando para realizar la copia de seguridad en un archivo snapshot.
 
    ```bash
-   sudo ETCDCTL_API=3 etcdctl snapshot save /tmp/snapshot-pre-boot.db      --endpoints=https://127.0.0.1:2379      --cacert=/etc/kubernetes/pki/etcd/ca.crt      --cert=/etc/kubernetes/pki/etcd/server.crt      --key=/etc/kubernetes/pki/etcd/server.key
+   sudo ETCDCTL_API=3 etcdctl snapshot save /opt/etcd-backup.db \
+      --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+      --cert=/etc/kubernetes/pki/etcd/server.crt \
+      --key=/etc/kubernetes/pki/etcd/server.key
    ```
 
-   Este comando crea un snapshot de etcd en la ruta `/tmp/snapshot-pre-boot.db`.
+   Este comando crea un snapshot de etcd en la ruta `/opt/etcd-backup.db`.
 
-## Paso 5: Restaurar la Copia de Seguridad
+   Ten en cuenta que la opción `--endpoints` no es necesaria, ya que estamos ejecutando el comando en el mismo servidor que etcd.
+
+## Paso 6: Restaurar la Copia de Seguridad
 
 1. **Eliminar el deployment anterior** (opcional):
 
    ```bash
-   kubectl delete -f https://k8s.io/examples/controllers/nginx-deployment.yaml
+   kubectl delete -f https://raw.githubusercontent.com/istio/istio/release-1.23/samples/bookinfo/platform/kube/bookinfo.yaml -n bookinfo   
    ```
 
 2. **Restaurar la copia de seguridad**: Para restaurar la copia de seguridad, utiliza el siguiente comando:
 
    ```bash
-   sudo ETCDCTL_API=3 etcdctl snapshot restore /tmp/snapshot-pre-boot.db      --name=master      --data-dir=/var/lib/etcd-from-backup      --initial-cluster=master=https://127.0.0.1:2380      --initial-cluster-token=etcd-cluster-1      --initial-advertise-peer-urls=https://127.0.0.1:2380      --cacert=/etc/kubernetes/pki/etcd/ca.crt      --cert=/etc/kubernetes/pki/etcd/server.crt      --key=/etc/kubernetes/pki/etcd/server.key
+   sudo ETCDCTL_API=3 etcdctl snapshot restore /opt/etcd-backup.db \
+      --data-dir=/var/lib/from-backup
    ```
 
-   Este comando restaurará el snapshot en el directorio `/var/lib/etcd-from-backup`. Ten en cuenta que estamos dando un nuevo nombre al clúster de etcd y reinicializando el token del clúster.
+   Este comando restaurará el snapshot en el directorio `/var/lib/from-backup`. 
 
-## Paso 6: Modificar el Manifiesto de etcd
+   El parametro `--data-dir` de `etcdctl` se utiliza para especificar la **ubicación del directorio de datos** donde etcd almacena su información. Este directorio contiene todos los datos de estado persistente de etcd, incluyendo:
+
+   - **Registros de transacciones** (logs) que se utilizan para mantener la consistencia de las operaciones en etcd.
+   - **Snapshots** que representan una copia completa del estado del cluster en un momento dado.
+
+   En el contexto de **restaurar una copia de seguridad (snapshot)** de etcd, el parámetro `--data-dir` indica dónde se deben almacenar los datos restaurados. Esto es importante porque, al realizar la restauración, estamos creando un nuevo estado inicial de etcd a partir de una copia de seguridad, y necesitamos un directorio vacío para poder volcar los datos restaurados. 
+
+   En general:
+
+   - **Backup**: Cuando tomas un snapshot, etcdctl almacena la copia en un archivo específico, pero no interactúa directamente con el directorio de datos.
+   - **Restore**: Cuando restauras desde un snapshot, el parámetro `--data-dir` permite definir un nuevo directorio donde se reconstituirá el estado del cluster a partir del snapshot.
+
+## Paso 7: Modificar el Manifiesto de etcd
 
 Para aplicar la restauración en el clúster, debes modificar el manifiesto del pod etcd para que apunte al nuevo directorio de datos.
 
@@ -131,15 +184,14 @@ Para aplicar la restauración en el clúster, debes modificar el manifiesto del 
    sudo vi /etc/kubernetes/manifests/etcd.yaml
    ```
 
-2. **Cambiar el directorio de datos**: Modifica la línea `--data-dir` para que apunte al nuevo directorio restaurado:
+2. **Cambiar el directorio de datos**: 
 
-   ```yaml
-   - --data-dir=/var/lib/etcd-from-backup
-   ```
+Modifica el valor del atributo `spec.volumes.hostPath` con el nombre `etcd-data` del valor original `/var/lib/etcd` a `/var/lib/from-backup`.
+
 
 3. **Guardar los cambios**: Cuando se guarda este archivo, el pod de etcd se destruirá y se volverá a crear automáticamente, utilizando los nuevos datos restaurados.
 
-## Paso 7: Verificación
+## Paso 8: Verificación
 
 1. **Verificar el estado del pod**:
 
