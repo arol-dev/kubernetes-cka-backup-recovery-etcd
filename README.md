@@ -143,6 +143,12 @@ etcdctl version
 
    Este comando crea un snapshot de etcd en la ruta `/opt/etcd-backup.db`.
 
+   Verificamos que el snapshot se haya creado correctamente, ejecutando el siguiente comando:
+
+   ``bash
+   sudo etcdctl --write-out=table snapshot status /opt/etcd-backup.db
+   ```
+
    Ten en cuenta que la opción `--endpoints` no es necesaria, ya que estamos ejecutando el comando en el mismo servidor que etcd.
 
 ## Paso 6: Restaurar la Copia de Seguridad
@@ -186,8 +192,9 @@ Para aplicar la restauración en el clúster, debes modificar el manifiesto del 
 
 2. **Cambiar el directorio de datos**: 
 
-Modifica el valor del atributo `spec.volumes.hostPath` con el nombre `etcd-data` del valor original `/var/lib/etcd` a `/var/lib/from-backup`.
-
+- Modifica el valor del atributo `--data-dir` en la seccion `containers.command` del valor original `/var/lib/etcd` a `/var/lib/from-backup`.
+- Modifica el valor del atributo `volumeMounts.mountPath` con el nombre `etcd-data` del valor original `/var/lib/etcd` a `/var/lib/from-backup`.
+- Modifica el valor del atributo `spec.volumes.hostPath` con el nombre `etcd-data` del valor original `/var/lib/etcd` a `/var/lib/from-backup`.
 
 3. **Guardar los cambios**: Cuando se guarda este archivo, el pod de etcd se destruirá y se volverá a crear automáticamente, utilizando los nuevos datos restaurados.
 
@@ -204,15 +211,21 @@ Modifica el valor del atributo `spec.volumes.hostPath` con el nombre `etcd-data`
 2. **Verificar los registros**:
 
    ```bash
-   kubectl logs -n kube-system etcd-master
+   kubectl logs -n kube-system etcd-controlplane
    ```
 
    Revisa los registros para asegurarte de que no haya errores relacionados con la restauración.
+
+   ```bash
+   kubectl get pods -n bookinfo
+   ``` 
+
+   Deberías ver que los pods de la aplicación BookInfo se han desplegado nuevamente porque estaban presentes en el momento en que se creó el snapshot.
 
 ## Consejos Finales
 
 - Practica el proceso varias veces para que puedas realizarlo rápidamente en el examen.
 - Familiarízate con la estructura del archivo YAML de etcd.
-- Recuerda siempre modificar el `--data-dir` en el manifiesto para aplicar la restauración.
+- Recuerda siempre modificar el valor del atributo `spec.volumes.hostPath` con el nombre `etcd-data` en el manifiesto para aplicar la restauración.
 
 ¡Espero que este laboratorio te sea útil en tu preparación para el examen CKA! Si tienes alguna pregunta o deseas practicar más escenarios, no dudes en mencionarlo.
