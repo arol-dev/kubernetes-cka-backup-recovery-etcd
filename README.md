@@ -1,180 +1,166 @@
+# Estrategias de Backup y Recuperación de etcd - Lab Práctico para CKA
 
-# Vagrantfile and Scripts to Automate Kubernetes Setup using Kubeadm [Practice Environment for CKA/CKAD and CKS Exams]
+Este laboratorio práctico está diseñado para ayudar a los aspirantes a la certificación CKA (Certified Kubernetes Administrator) a aprender a implementar estrategias de backup y restauración de etcd, un componente esencial en el control plane de Kubernetes. Se basa en el material de respaldo "Backing Up and Restoring etcd". Asegúrate de seguir cada paso cuidadosamente y practicar varias veces para estar completamente preparado para el examen.
 
-A fully automated setup for CKA, CKAD, and CKS practice labs is tested on the following systems:
+## Requisitos
 
-- Windows
-- Ubuntu Desktop
-- Mac Intel-based systems
+- Acceso a un nodo de control (controlplane) con permisos para ejecutar comandos de Kubernetes y etcd.
+- Cliente `etcdctl` instalado.
+- Conocimiento básico del uso de `kubectl` y edición de archivos YAML.
 
-If you are MAC Silicon user, Please use the following repo.
+## Objetivos
 
-- [Vagrant Kubeadm Setup on MAC Silicon](https://github.com/techiescamp/vagrant-kubeadm-mac-silicon)
+1. Realizar una copia de seguridad (snapshot) de etcd.
+2. Restaurar la copia de seguridad en un nuevo directorio de datos.
+3. Modificar el manifiesto de etcd para usar el nuevo directorio.
 
-## Kubernetes Certification Voucher (UpTo 47% OFF - Limited Time Offer) 🎉
+## Prerrequisitos
 
-As part of our commitment to helping the DevOps community save money on Kubernetes Certifications, we continuously update the latest voucher codes from the Linux Foundation
+- **VirtualBox** (se necesita **Python** y **pywin32** como prerrequisitos).
+- **Vagrant**.
+- **MobaXterm** para sesiones SSH.
 
-🚀  CKA, CKAD, CKS, or KCNA exam aspirants can **save 40%** today using code **NOV24KUBECT** at https://kube.promo/devops. It is a limited-time offer from the Linux Foundation.
+## Contenido del Repositorio
 
-The following are the best bundles to **save 47% (up to $788)** with code **NOV24KUBECT**
+Este repositorio incluye:
 
-- KCNA + KCSA + CKA + CKAD + CKS ($788 Savings): [kube.promo/kubestronaut](https://kube.promo/kubestronaut)
-- CKA + CKAD + CKS Exam bundle ($528 Savings): [kube.promo/k8s-bundle](https://kube.promo/k8s-bundle)
-- CKA + CKS Bundle ($355 Savings) [kube.promo/bundle](https://kube.promo/bundle)
-- KCNA + CKA ( $288 Savings) [kube.promo/kcka-bundle](https://kube.promo/kcna-cka)
-- KCSA + CKS Exam Bundle ($229 Savings) [kube.promo/kcsa-cks](https://kube.promo/kcsa-cks)
-- KCNA + KCSA Exam Bundle ($203 Savings) [kube.promo/kcna-kcsa](https://kube.promo/kcna-kcsa)
+- Una carpeta `scripts` con dos scripts que proporcionan soporte durante el laboratorio.
+- Un fichero `Vagrantfile` que permite automatizar el despliegue de tres VMs en VirtualBox.
 
->Note: You have one year of validity to appear for the certification exam after registration
+Las VMs consisten en:
 
-## Setup Prerequisites
+- 1 nodo master.
+- 2 nodos worker.
 
-- A working Vagrant setup using Vagrant + VirtualBox
+## Paso 1: Despliegue de las VMs
 
-Here is the high level workflow.
+1. Clona el repositorio en tu entorno local:
 
+   ```bash
+   git clone https://github.com/arol-dev/kubernetes-cka-install-upgrade-cluster.git
+   cd kubernetes-cka-install-upgrade-cluster
+   ```
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/cc5594b5-42c2-4c56-be21-6441f849f537" width="65%" />
-</p>
+2. Dentro del repositorio, ejecuta el siguiente comando para desplegar las VMs:
 
-## Documentation
+   ```bash
+   vagrant up
+   ```
 
-Current k8s version for CKA, CKAD, and CKS exam: 1.30
+   Esto comenzará a desplegar tres VMs en VirtualBox: un nodo master y dos worker nodes. Espera unos minutos para que el proceso termine.
 
-The setup is updated with 1.31 cluster version.
+3. Verifica el estado de las VMs con:
 
-Refer to this link for documentation full: https://devopscube.com/kubernetes-cluster-vagrant/
+   ```bash
+   vagrant status
+   ```
 
+   Asegúrate de que las tres máquinas estén en estado `running`.
 
-## Prerequisites
+4. Obtén la configuración SSH para conectarte a las máquinas:
 
-1. Working Vagrant setup
-2. 8 Gig + RAM workstation as the Vms use 3 vCPUS and 4+ GB RAM
+   ```bash
+   vagrant ssh-config
+   ```
 
-## For MAC/Linux Users
+   Guarda los detalles proporcionados, ya que los necesitarás en el siguiente paso.
 
-The latest version of Virtualbox for Mac/Linux can cause issues.
+## Paso 2: Conectar a las VMs con MobaXterm
 
-Create/edit the /etc/vbox/networks.conf file and add the following to avoid any network-related issues.
-<pre>* 0.0.0.0/0 ::/0</pre>
+1. Abre **MobaXterm** y utiliza la configuración SSH obtenida anteriormente para conectarte a las tres máquinas.
+   - No se requiere un usuario específico, deja el campo vacío.
+   - Si se te solicita usuario o contraseña, utiliza la cadena `vagrant`.
 
-or run below commands
+### Paso 3: Instalación del Cliente etcdctl
 
-```shell
-sudo mkdir -p /etc/vbox/
-echo "* 0.0.0.0/0 ::/0" | sudo tee -a /etc/vbox/networks.conf
+Para realizar operaciones de backup y restauración, necesitas el cliente `etcdctl`. Instálalo con:
+
+```bash
+sudo apt install etcd-client
 ```
 
-So that the host only networks can be in any range, not just 192.168.56.0/21 as described here:
-https://discuss.hashicorp.com/t/vagrant-2-2-18-osx-11-6-cannot-create-private-network/30984/23
+### Paso 4: Realizar una Copia de Seguridad de etcd
 
-## Bring Up the Cluster
+1. **Identificar el pod de etcd**: Ejecuta el siguiente comando para identificar el pod etcd en el cluster.
 
-To provision the cluster, execute the following commands.
+   ```bash
+   kubectl get pods -n kube-system -o wide | grep etcd
+   ```
 
-```shell
-git clone https://github.com/scriptcamp/vagrant-kubeadm-kubernetes.git
-cd vagrant-kubeadm-kubernetes
-vagrant up
-```
-## Set Kubeconfig file variable
+2. **Obtener las ubicaciones de los certificados y la clave**: Necesitarás los certificados para realizar una copia de seguridad. Usa:
 
-```shell
-cd vagrant-kubeadm-kubernetes
-cd configs
-export KUBECONFIG=$(pwd)/config
-```
+   ```bash
+   kubectl describe pod etcd-master -n kube-system
+   ```
 
-or you can copy the config file to .kube directory.
+   Busca las siguientes opciones: `cert-file`, `key-file`, `trusted-ca-file`, y `listen-client-urls`.
 
-```shell
-cp config ~/.kube/
-```
+3. **Realizar la copia de seguridad**:
 
-## Install Kubernetes Dashboard
+   Ejecuta el siguiente comando para realizar la copia de seguridad en un archivo snapshot.
 
-The dashboard is automatically installed by default, but it can be skipped by commenting out the dashboard version in _settings.yaml_ before running `vagrant up`.
+   ```bash
+   sudo ETCDCTL_API=3 etcdctl snapshot save /tmp/snapshot-pre-boot.db      --endpoints=https://127.0.0.1:2379      --cacert=/etc/kubernetes/pki/etcd/ca.crt      --cert=/etc/kubernetes/pki/etcd/server.crt      --key=/etc/kubernetes/pki/etcd/server.key
+   ```
 
-If you skip the dashboard installation, you can deploy it later by enabling it in _settings.yaml_ and running the following:
-```shell
-vagrant ssh -c "/vagrant/scripts/dashboard.sh" controlplane
-```
+   Este comando crea un snapshot de etcd en la ruta `/tmp/snapshot-pre-boot.db`.
 
-## Kubernetes Dashboard Access
+### Paso 5: Restaurar la Copia de Seguridad
 
-To get the login token, copy it from _config/token_ or run the following command:
-```shell
-kubectl -n kubernetes-dashboard get secret/admin-user -o go-template="{{.data.token | base64decode}}"
-```
+1. **Eliminar el deployment anterior** (opcional):
 
-Make the dashboard accessible:
-```shell
-kubectl proxy
-```
+   ```bash
+   kubectl delete -f https://k8s.io/examples/controllers/nginx-deployment.yaml
+   ```
 
-Open the site in your browser:
-```shell
-http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
-```
+2. **Restaurar la copia de seguridad**: Para restaurar la copia de seguridad, utiliza el siguiente comando:
 
-## To shutdown the cluster,
+   ```bash
+   sudo ETCDCTL_API=3 etcdctl snapshot restore /tmp/snapshot-pre-boot.db      --name=master      --data-dir=/var/lib/etcd-from-backup      --initial-cluster=master=https://127.0.0.1:2380      --initial-cluster-token=etcd-cluster-1      --initial-advertise-peer-urls=https://127.0.0.1:2380      --cacert=/etc/kubernetes/pki/etcd/ca.crt      --cert=/etc/kubernetes/pki/etcd/server.crt      --key=/etc/kubernetes/pki/etcd/server.key
+   ```
 
-```shell
-vagrant halt
-```
+   Este comando restaurará el snapshot en el directorio `/var/lib/etcd-from-backup`. Ten en cuenta que estamos dando un nuevo nombre al clúster de etcd y reinicializando el token del clúster.
 
-## To restart the cluster,
+### Paso 6: Modificar el Manifiesto de etcd
 
-```shell
-vagrant up
-```
+Para aplicar la restauración en el clúster, debes modificar el manifiesto del pod etcd para que apunte al nuevo directorio de datos.
 
-## To destroy the cluster,
+1. **Editar el manifiesto**:
 
-```shell
-vagrant destroy -f
-```
-# Network graph
+   ```bash
+   sudo vi /etc/kubernetes/manifests/etcd.yaml
+   ```
 
-```
-                  +-------------------+
-                  |    External       |
-                  |  Network/Internet |
-                  +-------------------+
-                           |
-                           |
-             +-------------+--------------+
-             |        Host Machine        |
-             |     (Internet Connection)  |
-             +-------------+--------------+
-                           |
-                           | NAT
-             +-------------+--------------+
-             |    K8s-NATNetwork          |
-             |    192.168.99.0/24         |
-             +-------------+--------------+
-                           |
-                           |
-             +-------------+--------------+
-             |     k8s-Switch (Internal)  |
-             |       192.168.99.1/24      |
-             +-------------+--------------+
-                  |        |        |
-                  |        |        |
-          +-------+--+ +---+----+ +-+-------+
-          |  Master  | | Worker | | Worker  |
-          |   Node   | | Node 1 | | Node 2  |
-          |192.168.99| |192.168.| |192.168. |
-          |   .99    | | 99.81  | | 99.82   |
-          +----------+ +--------+ +---------+
-```
+2. **Cambiar el directorio de datos**: Modifica la línea `--data-dir` para que apunte al nuevo directorio restaurado:
 
-This network graph shows:
+   ```yaml
+   - --data-dir=/var/lib/etcd-from-backup
+   ```
 
-1. The host machine connected to the external network/internet.
-2. The NAT network (K8s-NATNetwork) providing a bridge between the internal network and the external network.
-3. The internal Hyper-V switch (k8s-Switch) connecting all the Kubernetes nodes.
-4. The master node and two worker nodes, each with their specific IP addresses, all connected to the internal switch.
+3. **Guardar los cambios**: Cuando se guarda este archivo, el pod de etcd se destruirá y se volverá a crear automáticamente, utilizando los nuevos datos restaurados.
 
+### Paso 7: Verificación
+
+1. **Verificar el estado del pod**:
+
+   ```bash
+   kubectl get pods -n kube-system -o wide | grep etcd
+   ```
+
+   Asegúrate de que el pod esté en estado `Running`.
+
+2. **Verificar los registros**:
+
+   ```bash
+   kubectl logs -n kube-system etcd-master
+   ```
+
+   Revisa los registros para asegurarte de que no haya errores relacionados con la restauración.
+
+## Consejos Finales
+
+- Practica el proceso varias veces para que puedas realizarlo rápidamente en el examen.
+- Familiarízate con la estructura del archivo YAML de etcd.
+- Recuerda siempre modificar el `--data-dir` en el manifiesto para aplicar la restauración.
+
+¡Espero que este laboratorio te sea útil en tu preparación para el examen CKA! Si tienes alguna pregunta o deseas practicar más escenarios, no dudes en mencionarlo.
